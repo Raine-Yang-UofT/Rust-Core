@@ -3,12 +3,15 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
+#![feature(abi_x86_interrupt)]
 
 use core::panic::PanicInfo;
 
-// import serial and vag_buffer and make them public from crate root
+// import crates and make them public from crate root
 pub mod serial;
 pub mod vga_buffer;
+pub mod interrupts;
+pub mod gdt;
 
 
 /*
@@ -77,10 +80,20 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 }
 
 
+// initialization
+pub fn init() {
+    gdt::init();    // initialize gdt
+    interrupts::init_idt();  // initialize interruptions
+    unsafe {interrupts::PICS.lock().initialize()}   // initialize PIC
+    x86_64::instructions::interrupts::enable();     // enable interrupt controller for CPU 
+}
+
+
 
 #[cfg(test)]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    init();
     test_main();
     loop {}
 }
@@ -90,4 +103,12 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     test_panic_handler(info)
+}
+
+
+pub fn hlt_loop() -> ! {
+    loop {
+        // hlt: halt the CPU until the next interrupt
+        x86_64::instructions::hlt();
+    }
 }

@@ -8,6 +8,7 @@
 
 use core::panic::PanicInfo;
 use rust_core::println;
+use rust_core::eprintln;
 
 
 /*
@@ -18,8 +19,8 @@ Print the panic message and wait indefinitely
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("{}", info);
-    loop {}
+    eprintln!("{}", info);
+    rust_core::hlt_loop();
 }
 
 
@@ -40,11 +41,11 @@ fn panic(info: &PanicInfo) -> ! {
 The program entry
 */
 pub extern "C" fn _start() -> ! {
-    println!("Hello World{}", "!");
+    rust_core::init();  // initializing kernal
 
     //  running test cases with cargo test
     #[cfg(test)]
     test_main();
 
-    loop {}
+    rust_core::hlt_loop();
 }

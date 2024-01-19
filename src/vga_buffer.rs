@@ -46,6 +46,11 @@ impl ColorCode {
     }
 }
 
+enum StatusColor {
+    NormalColor,
+    ErrorColor
+}
+
 
 /*
 a character on screen, consisting of the ascii code and color code
@@ -143,6 +148,14 @@ impl Writer {
             self.buffer.chars[row][col].write(blank);
         }
     }
+
+    // change the color code based on status
+    fn change_color(&mut self, status: StatusColor) {
+        self.color_code = match status {
+            StatusColor::NormalColor => ColorCode::new(Color::Cyan, Color::Black),
+            StatusColor::ErrorColor => ColorCode::new(Color::Red, Color::Black),
+        }
+    } 
 }
 
 // implement format writing for Writer
@@ -192,5 +205,60 @@ macro_rules! println {
 #[doc(hidden)]  
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    WRITER.lock().write_fmt(args).unwrap();
+    use x86_64::instructions::interrupts;
+    /*
+    Since _print acquires the lock of WRITER, a deadlock would occur if an interrupt
+    tries to acquire WRITER lock. We disable hardware interrupt during printing
+    */
+    interrupts::without_interrupts(|| {
+        WRITER.lock().change_color(StatusColor::NormalColor);
+        WRITER.lock().write_fmt(args).unwrap();
+    });
+}
+
+
+// implement eprint and eprintln macro
+// NOTE: custom implementation, not the correct standard eprintln method
+#[macro_export]
+macro_rules! eprint {
+    ($($arg:tt)*) => ($crate::vga_buffer::_eprint(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! eprintln {
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::eprint!("{}\n", format_args!($($arg)*)));
+}
+
+
+#[doc(hidden)]
+pub fn _eprint(args: fmt::Arguments) {
+    use core::fmt::Write;
+    use x86_64::instructions::interrupts;
+    interrupts::without_interrupts(|| {
+        WRITER.lock().change_color(StatusColor::ErrorColor);
+        WRITER.lock().write_fmt(args).unwrap();
+    });
+}
+
+
+// test cases
+#[test_case]
+fn test_println_output() {
+    use core::fmt::Write;
+    use x86_64::instructions::interrupts;
+
+    /*
+    The hardware interrupt may produce characters that interfere with test
+    disable hardware interrupt throughout the test
+     */
+    let s = "Some test string that fits on a single line";
+    interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+        writeln!(writer, "\n{}", s).expect("writeln failed");
+        for (i, c) in s.chars().enumerate() {
+            let screen_char = writer.buffer.chars[BUFFER_HEIGHT - 2][i].read();
+            assert_eq!(char::from(screen_char.ascii_character), c);
+        }
+    });
 }
