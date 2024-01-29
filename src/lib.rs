@@ -5,13 +5,20 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
+#[cfg(test)]
+use bootloader::{entry_point, BootInfo};
+
 use core::panic::PanicInfo;
+
+extern crate alloc;
 
 // import crates and make them public from crate root
 pub mod serial;
 pub mod vga_buffer;
 pub mod interrupts;
 pub mod gdt;
+pub mod memory;
+pub mod allocator;
 
 
 /*
@@ -89,13 +96,17 @@ pub fn init() {
 }
 
 
+/*
+entry point for cargo test
+*/
+#[cfg(test)]
+entry_point!(test_kernal_main);
 
 #[cfg(test)]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+fn test_kernal_main(_boot_info: &'static BootInfo) -> ! {
     init();
     test_main();
-    loop {}
+    hlt_loop();
 }
 
 // In test mode: call test_panic_handler when a panic happens (test failed)

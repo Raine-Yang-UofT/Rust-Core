@@ -7,9 +7,9 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
-use rust_core::println;
-use rust_core::eprintln;
-
+use rust_core::{println, eprintln};
+use bootloader::{BootInfo, entry_point};
+use x86_64::VirtAddr;
 
 /*
 panic handler for non-test configuration (cargo run)
@@ -36,16 +36,50 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 
-#[no_mangle]    // disable function renaming during compile
 /*
-The program entry
+The program entry specified by the bootloader
 */
-pub extern "C" fn _start() -> ! {
+entry_point!(kernal_main);
+
+fn kernal_main(boot_info: &'static BootInfo) -> ! {
     rust_core::init();  // initializing kernal
 
     //  running test cases with cargo test
     #[cfg(test)]
     test_main();
 
+    use rust_core::allocator;
+    use rust_core::memory::{self, BootInfoFrameAllocator};
+
+    let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
+    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut frame_allocator = unsafe {
+        BootInfoFrameAllocator::init(&boot_info.memory_map)
+    };
+
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    extern crate alloc;
+    use alloc::{boxed::Box, vec, vec::Vec, rc::Rc};
+
+    // test box
+    let heap_value = Box::new(42);
+    println!("heap_value at {:p}", heap_value);
+
+    // test vector
+    let mut vec = Vec::new();
+    for i in 0..500 {
+        vec.push(i)
+    }
+    println!("vec at {:p}", vec.as_slice());
+
+    // tet rc
+    let reference_counted = Rc::new(vec![1, 2, 3]);
+    let cloned_reference = reference_counted.clone();
+    println!("current reference count {}", Rc::strong_count(&cloned_reference));
+    core::mem::drop(reference_counted);
+    println!("reference count now {}", Rc::strong_count(&cloned_reference));
+
+    println!("It did not crash");
     rust_core::hlt_loop();
 }
