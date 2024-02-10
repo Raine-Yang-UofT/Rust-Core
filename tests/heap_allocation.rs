@@ -60,7 +60,7 @@ fn large_vec() {
 // test memory reuse
 #[test_case]
 fn many_boxes() {
-    for i in 0..rust_core::allocator::HEAP_SIZE {
+    for i in 0..HEAP_SIZE {
         let x = Box::new(i);
         assert_eq!(*x, i);
     }

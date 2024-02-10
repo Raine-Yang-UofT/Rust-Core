@@ -1,7 +1,8 @@
 use super::{align_up, Locked};
-use core::{mem, ptr};
+use core::{mem, ptr, fmt};
 use alloc::alloc::{GlobalAlloc, Layout};
 
+use crate::println;
 
 // a node of linkedlist allocator
 struct ListNode {
@@ -23,6 +24,13 @@ impl ListNode {
     // get the end memory address of the region
     fn end_addr(&self) -> usize {
         self.start_addr() + self.size
+    }
+}
+
+// test method: display the linked list node
+impl fmt::Display for ListNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "start: {}, end: {}", self.start_addr(), self.end_addr())
     }
 }
 
@@ -55,12 +63,55 @@ impl LinkedListAllocator {
         // ensure the memory is large enough to hold the linkedlist
         assert!(size >= mem::size_of::<ListNode>());
 
-        // create a new node and append it to the start of linkedlist
-        let mut node = ListNode::new(size); // the node is now on stack
-        node.next = self.head.next.take();  // set node to the start of linked list
+        // the new node
+        let mut new_node = ListNode::new(size); // the node is now on stack
+        // find the proper location of node in linkedlist
+        
+        // add node to the head of list
+        let mut current = &mut self.head;
+
+        if current.next.is_none() ||
+            addr < current.next.as_ref().unwrap().start_addr() {    // the head is None or new node has smaller start address than first node
+            new_node.next = current.next.take();
+        } else {
+            // traverse the linkedlist
+            while let Some(ref mut next) = current.next {
+                if next.start_addr() >= addr {  
+                    break;
+                }
+                current = current.next.as_mut().unwrap()
+            }
+            // assign the node's next node
+            // we can only assign its previous node when the node is written to memory (having a 'static lifecycle)
+            new_node.next = current.next.take();
+        }
+
+
         let node_ptr = addr as *mut ListNode;
-        node_ptr.write(node);   // write the new node in memory
-        self.head.next = Some(&mut *node_ptr)   // update self.head.next to the new node
+        node_ptr.write(new_node);   // write the new node in memory
+        current.next = Some(&mut *node_ptr);    // connect the node with the previous node
+
+    }
+
+    // merge consecutive free memory regions into larger regions
+    fn merge_region(&mut self) {
+        let mut current = &mut self.head;
+
+        while let Some(ref mut node) = current.next {
+            // get the start and end address of current node (prevent borrowing issue)
+            let start_addr = node.start_addr();
+            let end_addr = node.end_addr();
+            // check whether it is adjacent to the next node
+            if let Some(ref mut next) = node.next {
+                if end_addr == next.start_addr() {
+                    // combine two memory regions
+                    node.size = next.end_addr() - start_addr;
+                    node.next = next.next.take();
+                }
+            }
+
+            current = current.next.as_mut().unwrap();
+        }
     }
 
     // find a large enough unused heap region 
@@ -115,6 +166,16 @@ impl LinkedListAllocator {
         (size, layout.align())
     }
 
+
+    // test method: print the linked list    
+    fn print_linkedlist(&self) {
+        let mut current = &self.head;
+        while let Some(ref node) = current.next {
+            println!("{}", node);
+            current = current.next.as_ref().unwrap();
+        }
+    }
+
 }
 
 unsafe impl GlobalAlloc for Locked<LinkedListAllocator> {
@@ -140,6 +201,9 @@ unsafe impl GlobalAlloc for Locked<LinkedListAllocator> {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let (size, _) = LinkedListAllocator::size_align(layout);
         // add the freed region to free list
-        self.lock().add_free_region(ptr as usize, size)
+        self.lock().add_free_region(ptr as usize, size);;
+        // merge unused regions
+        self.lock().merge_region();
     }
+
 }

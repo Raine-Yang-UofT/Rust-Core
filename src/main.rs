@@ -63,22 +63,23 @@ fn kernal_main(boot_info: &'static BootInfo) -> ! {
     use alloc::{boxed::Box, vec, vec::Vec, rc::Rc};
 
     // test box
-    let heap_value = Box::new(42);
-    println!("heap_value at {:p}", heap_value);
-
-    // test vector
-    let mut vec = Vec::new();
-    for i in 0..500 {
-        vec.push(i)
+    {
+        let heap_value = Box::new(42);
     }
-    println!("vec at {:p}", vec.as_slice());
 
-    // tet rc
-    let reference_counted = Rc::new(vec![1, 2, 3]);
-    let cloned_reference = reference_counted.clone();
-    println!("current reference count {}", Rc::strong_count(&cloned_reference));
-    core::mem::drop(reference_counted);
-    println!("reference count now {}", Rc::strong_count(&cloned_reference));
+    println!("---");
+
+    {
+        let heap_value = vec![1000, 2000, 3000, 4000, 5000, 6000];
+    }
+
+    println!("---");
+    
+    {
+        let heap_value = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    }
+    
+
 
     println!("It did not crash");
     rust_core::hlt_loop();
