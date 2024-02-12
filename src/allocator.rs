@@ -9,9 +9,12 @@ use linked_list_allocator::LockedHeap;
 // custom allocators
 pub mod bump_allocator;
 pub mod linked_list;
+pub mod fixed_size_block;
 
 use bump_allocator::BumpAllocator;
 use linked_list::LinkedListAllocator;
+
+use self::fixed_size_block::FixedSizeBlockAllocator;
 
 // the virtual memory allocated for the heap
 pub const HEAP_START: usize = 0x_4444_4444_0000;
@@ -102,5 +105,8 @@ pub fn init_heap(
 //static ALLOCATOR: Locked<BumpAllocator> = Locked::new(BumpAllocator::new());
 
 // linkedlist allocator:
+//  #[global_allocator]
+// static ALLOCATOR: Locked<LinkedListAllocator> = Locked::new(LinkedListAllocator::new());
+
 #[global_allocator]
-static ALLOCATOR: Locked<LinkedListAllocator> = Locked::new(LinkedListAllocator::new());
+static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());

@@ -156,6 +156,36 @@ impl LinkedListAllocator {
         Ok(alloc_start)
     }
 
+
+    // allocator a heap memory region
+    pub unsafe fn allocate(&mut self, layout: Layout) -> *mut u8 {
+        let (size, align) = LinkedListAllocator::size_align(layout);
+
+        // find a node that contains a large enough region
+        if let Some((region, alloc_start)) = self.find_region(size, align) {
+            let alloc_end = alloc_start.checked_add(size).expect("overflow");
+            // append a new node in free list to store remaining memory region in the allocation
+            let excess_size = region.end_addr() - alloc_end;
+            if excess_size > 0 {
+                self.add_free_region(alloc_end, excess_size);
+            }
+            alloc_start as *mut u8
+        } else {
+            // cannot find a memory region with appropriate size
+            ptr::null_mut()
+        }
+    }
+
+    // deallocate a heap memory region
+    pub unsafe fn deallocate(&mut self, ptr: *mut u8, layout: Layout) {
+        let (size, _) = LinkedListAllocator::size_align(layout);
+        // add the freed region to free list
+        self.add_free_region(ptr as usize, size);
+        // merge unused regions
+        self.merge_region();
+    }
+
+
     // adjust the given layout so the allocated memory can store a ListNode when being deallocated again
     fn size_align(layout: Layout) -> (usize, usize) {
         let layout = layout
@@ -180,30 +210,11 @@ impl LinkedListAllocator {
 
 unsafe impl GlobalAlloc for Locked<LinkedListAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let (size, align) = LinkedListAllocator::size_align(layout);
-        let mut allocator = self.lock();
-
-        // find a node that contains a large enough region
-        if let Some((region, alloc_start)) = allocator.find_region(size, align) {
-            let alloc_end = alloc_start.checked_add(size).expect("overflow");
-            // append a new node in free list to store remaining memory region in the allocation
-            let excess_size = region.end_addr() - alloc_end;
-            if excess_size > 0 {
-                allocator.add_free_region(alloc_end, excess_size);
-            }
-            alloc_start as *mut u8
-        } else {
-            // cannot find a memory region with appropriate size
-            ptr::null_mut()
-        }
+        self.lock().allocate(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let (size, _) = LinkedListAllocator::size_align(layout);
-        // add the freed region to free list
-        self.lock().add_free_region(ptr as usize, size);;
-        // merge unused regions
-        self.lock().merge_region();
+        self.lock().deallocate(ptr, layout)
     }
 
 }
