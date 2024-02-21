@@ -7,9 +7,10 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
-use rust_core::{println, eprintln};
+use rust_core::{eprintln, println, task::{simple_executor, keyboard}};
 use bootloader::{BootInfo, entry_point};
 use x86_64::VirtAddr;
+use rust_core::task::{Task, executor::Executor};
 
 /*
 panic handler for non-test configuration (cargo run)
@@ -33,6 +34,15 @@ invoke test_panic_handler from lib.rs
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     rust_core::test_panic_handler(info)
+}
+
+async fn async_number() -> u32 {
+    42
+}
+
+async fn example_task() {
+    let number = async_number().await;
+    println!("{}", number);
 }
 
 
@@ -59,26 +69,10 @@ fn kernal_main(boot_info: &'static BootInfo) -> ! {
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 
-    extern crate alloc;
-    use alloc::{boxed::Box, vec, vec::Vec, rc::Rc};
-
-    // test box
-    {
-        let heap_value = Box::new(42);
-    }
-
-    println!("---");
-
-    {
-        let heap_value = vec![1000, 2000, 3000, 4000, 5000, 6000];
-    }
-
-    println!("---");
-    
-    {
-        let heap_value = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    }
-    
+    let mut executor = Executor::new();
+    executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.run();
 
 
     println!("It did not crash");
